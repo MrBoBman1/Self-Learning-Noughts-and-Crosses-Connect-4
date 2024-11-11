@@ -79,7 +79,6 @@ def validateinputlen(question,length,colour=bcolours.normal,exactlen=True,lowlen
                 return answer
         print(bcolours.bold + bcolours.red + "That is not the right length!" + bcolours.normal) 
 
-
 class Player:
     def __init__(self,symbol,ai,playernum):
         self.symbol = symbol#symbol that represents the player, such as 'X'
@@ -158,7 +157,6 @@ def format_read_options(read_options):
     for pair in range(0,int(len(ordinates)),2):
         options.append([ordinates[pair],ordinates[pair+1]])
     return options
-
 
 def wincheck(board,winreq,x,y):
     boardcopy = copy.deepcopy(board)#makes a copy so not to disrupt original
@@ -253,9 +251,9 @@ def askcontinue():
             choice = input("Be Sensible!")
 
 def settings():
-    #debug = input("Debug?")#returns set settings below to save time
-    #if debug:
-    #    return 3,3,3,2,{0:"-",1:"x",2:"o"},{"-":bcolours.grey,"x":bcolours.red,"o":bcolours.yellow},False,[1]
+    debug = input("Debug?")#returns set settings below to save time
+    if debug:
+        return 3,3,3,2,{0:"-",1:"x",2:"o"},{"-":bcolours.grey,"x":bcolours.red,"o":bcolours.yellow},False,[1]
     #clearscreen()
     w = validatenuminput("How many columns do you want your board to have?\n",1)
     clearscreen()
@@ -313,9 +311,101 @@ def get_turn(board):
                 turns += 1
     return turns
 
-def add_boardstate(boardstates,board,options,result,turn):
+def flip_board(direction,board,options):
+    length = len(board[0]) -1
+    height = len(board)-1
+    if direction == "horizontally":
+        for i in range(len(board)):
+            board[i].reverse()#in this case reverse can be used
+        for i in range(len(options)):
+            options[i][1] = length - options[i][1]
+        return board,options
+    elif direction == "vertically":
+        board.reverse()#just reverse all the rows
+        for i in range(len(options)):
+            options[i][0] = height - options[i][0]
+        return board,options
+    #length and height can be used interchangeably now as if the board is being flipped diagonally, it must have equal length and height
+    elif direction == "diagonallyup":#bottom left to top right is the mirror line
+        for y in range(height):
+            for x in range(length,y,-1):#only iterates through half the cells, as otherwise they would be swapped twice
+                board[y][x],board[x][y] = board[x][y],board[y][x]
+        for i in range(len(options)):
+            options[i][0],options[i][1] = options[i][1],options[i][0]
+        return board,options
+    elif direction == "diagonallydown":#top left to bottom right is the mirror
+        for y in range(height):
+            for x in range(y):
+                board[y][x],board[length-x][length-y] = board[length-x][length-y],board[y][x]
+        for i in range(len(options)):
+            options[i][0],options[i][1] = length-options[i][1],length-options[i][0]
+        return board,options
+
+def rotate_board(degree,board,options):
+    centre_x = (len(board[0])-1)/2
+    centre_y = (len(board)-1)/2
+    if degree == 180:
+        b,o = flip_board("horizontally",board,options)
+        return flip_board("vertically",b,o)
+    elif degree == 90:
+        for y in range(round(len(board)/2)):
+            for x in range(len(board)//2):
+                x_dist = x-centre_x
+                y_dist = y-centre_y
+                temp = board[y][x]#rotate round all 4 cells in the rotation
+                board[y][x] = board[int(centre_y-x_dist)][int(centre_x+y_dist)]
+                board[int(centre_y-x_dist)][int(centre_x+y_dist)] = board[int(centre_y-y_dist)][int(centre_x-x_dist)]
+                board[int(centre_y-y_dist)][int(centre_x-x_dist)] = board[int(centre_y+x_dist)][int(centre_x-y_dist)]
+                board[int(centre_y+x_dist)][int(centre_x-y_dist)] = temp
+        for i in range(len(options)):#rotates each option
+            options[i][0] -= options[i][1]-centre_x
+            options[i][1] += options[i][0]-centre_y
+        return board,options
+    elif degree == 270:
+        for y in range(round(len(board)/2)):
+            for x in range(len(board)//2):
+                x_dist = x-centre_x
+                y_dist = y-centre_y
+                temp = board[y][x]#rotate round all 4 cells in the rotation
+                board[y][x] = board[int(centre_y+x_dist)][int(centre_x-y_dist)]
+                board[int(centre_y+x_dist)][int(centre_x-y_dist)] = board[int(centre_y+y_dist)][int(centre_x+x_dist)]
+                board[int(centre_y+y_dist)][int(centre_x+x_dist)] = board[int(centre_y-x_dist)][int(centre_x+y_dist)]
+                board[int(centre_y-x_dist)][int(centre_x+y_dist)] = temp
+        for i in range(len(options)):#rotates each option
+            options[i][0] += options[i][1]-centre_x
+            options[i][1] -= options[i][0]-centre_y
+        return board,options
+
+def add_boardstate(boardstates,board,options,result,turn,gravity):
+
+    #when any boardstate it added, I am able to flip it and rotate it accordingly as the outcome of a mirrored board is identical
+    #this way, not nearly as many boards need to be played to find train the AI
+
     numturns = get_turn(board)
     boardstates[numturns].append([board,options,result,turn])
+    #no matter the game, the board can always be flipped horizontally
+    b,o = flip_board("horizontally",copy.copy(board),copy.copy(options))#copy them to be safe
+    boardstates[numturns].append([b,o,result,turn])
+
+    if not gravity:#if noughts and crosses
+        b,o = flip_board("vertically",copy.copy(board),copy.copy(options))
+        boardstates[numturns].append([copy.copy(b),copy.copy(o),result,turn])
+
+        b,o = rotate_board(180,copy.copy(board),copy.copy(options))
+        boardstates[numturns].append([copy.copy(b),copy.copy(o),result,turn])
+
+        if len(board[0]) == len(board):#is it a sqaure:
+            b,o = flip_board("diagonallyup",copy.copy(board),copy.copy(options))
+            boardstates[numturns].append([copy.copy(b),copy.copy(o),result,turn])
+
+            b,o = flip_board("diagonallydown",copy.copy(board),copy.copy(options))
+            boardstates[numturns].append([copy.copy(b),copy.copy(o),result,turn])
+
+            b,o = rotate_board(90,copy.copy(board),copy.copy(options))
+            boardstates[numturns].append([copy.copy(b),copy.copy(o),result,turn])
+
+            b,o = rotate_board(270,copy.copy(board),copy.copy(options))
+            boardstates[numturns].append([copy.copy(b),copy.copy(o),result,turn])
     return boardstates
 
 def learn_game(width,height,winreq,numplayers,gravity): #learns the optimal strategy to the current game for each player
@@ -349,10 +439,10 @@ def learn_game(width,height,winreq,numplayers,gravity): #learns the optimal stra
             loss_options[1].append(choice)
             
     if win_options:#if there are win options
-        boardstates = add_boardstate(boardstates,board,win_options,{playerturn},playerturn)#the only choice worth recording is the winning choice
+        boardstates = add_boardstate(boardstates,board,win_options,{playerturn},playerturn,gravity)#the only choice worth recording is the winning choice
         winners = {playerturn}
     elif draw_options:#if there are draw options after the win option, then take them
-        boardstates = add_boardstate(boardstates,board,draw_options,{0},playerturn)
+        boardstates = add_boardstate(boardstates,board,draw_options,{0},playerturn,gravity)
         winners = {0}
     else:
         #this is required to deal with the possibility that there could be multiple other winners (player 2 and player 3)
@@ -363,7 +453,7 @@ def learn_game(width,height,winreq,numplayers,gravity): #learns the optimal stra
                     winners.add(j)
             else:
                 winners.add(i)
-        boardstates = add_boardstate(boardstates,board,loss_options[1],winners,playerturn)#the player can no longer win, nor force a draw, so it does not matter which opponent they choose to allow to win
+        boardstates = add_boardstate(boardstates,board,loss_options[1],winners,playerturn,gravity)#the player can no longer win, nor force a draw, so it does not matter which opponent they choose to allow to win
     if winners == {0}:
         text = "Solved game, forced draw is possible"
     elif len(winners) == 1:
@@ -411,10 +501,10 @@ def play_turn(board,choice,gravity,playerturn,numplayers,winreq,boardstates):
             loss_options[1].append(choice)
 
     if win_options:#if there are win options
-        boardstates = add_boardstate(boardstates,board,win_options,{playerturn},playerturn)#the only choice worth recording is the winning choice
+        boardstates = add_boardstate(boardstates,board,win_options,{playerturn},playerturn,gravity)#the only choice worth recording is the winning choice
         return {playerturn},boardstates
     if draw_options:#if there are draw options after the win option, then take them
-        boardstates = add_boardstate(boardstates,board,draw_options,{0},playerturn)
+        boardstates = add_boardstate(boardstates,board,draw_options,{0},playerturn,gravity)
         return {0},boardstates
     else:
         #this is required to deal with the possibility that there could be multiple other winners (player 2 and player 3)
@@ -425,7 +515,7 @@ def play_turn(board,choice,gravity,playerturn,numplayers,winreq,boardstates):
                     winners.add(j)
             else:
                 winners.add(i)
-        boardstates = add_boardstate(boardstates,board,loss_options[1],winners,playerturn)#the player can no longer win, nor force a draw, so it does not matter which opponent they choose to allow to win
+        boardstates = add_boardstate(boardstates,board,loss_options[1],winners,playerturn,gravity)#the player can no longer win, nor force a draw, so it does not matter which opponent they choose to allow to win
         return winners,boardstates
 
 def find_options(board,gravity):
@@ -456,7 +546,6 @@ def get_directory(w,h,grav,pnum,winreq):#returns the directory that the game sho
         directory = os.path.join(directory,"Noughts and Crosses")
     directory = os.path.join(directory,str(pnum) + " Players","Streak " + str(winreq),str(w) + "*" + str(h))
     return directory
-
 
 def save_learnt(boardstates,numplayers,width,height,gravity,winreq,solved):
     directory = get_directory(width,height,gravity,numplayers,winreq)
@@ -506,11 +595,6 @@ def interpret_file(file_boardstates):
             boardstates[-1][-1].append(line)
     return boardstates
             
-        
-            
-            
-        
-
 def main():            
     bwidth,bheight,winreq,numplayers,symbols,colours,gravity,ai = settings()#initialise all settings
 
@@ -584,9 +668,9 @@ def main():
         text = text[1:]
         print("Overall winners are Players" + text + "!")
 
-
 clearscreen()#removes file text
 main()
+
 
 
 """
